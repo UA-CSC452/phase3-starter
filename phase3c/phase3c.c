@@ -39,7 +39,12 @@ void debug3(char *fmt, ...)
  * P3FrameInit --
  *
  *  Initializes the frame data structures.
- *
+ *  Four states of a frame:
+ *     FRAME_UNUSED
+ *     FRAME_INUSE
+ *     FRAME_ASSIGNED
+ *     FRAME_MAPPED
+ * 
  * Results:
  *   P3_ALREADY_INITIALIZED:    this function has already been called
  *   P1_SUCCESS:                success
