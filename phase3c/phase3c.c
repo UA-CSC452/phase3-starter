@@ -118,7 +118,7 @@ P3FrameFreeAll(int pid)
  * Results:
  *   P3_NOT_INITIALIZED:    P3FrameInit has not been called
  *   P3_OUT_OF_PAGES:       process has no free pages
- *   P1_INVALID_FRAME       the frame number is invalid
+ *   P3_INVALID_FRAME       the frame number is invalid
  *   P1_SUCCESS:            success
  *
  *----------------------------------------------------------------------
@@ -145,7 +145,7 @@ P3FrameMap(int frame, void **ptr)
  * Results:
  *   P3_NOT_INITIALIZED:    P3FrameInit has not been called
  *   P3_FRAME_NOT_MAPPED:   process didn’t map frame via P3FrameMap
- *   P1_INVALID_FRAME       the frame number is invalid
+ *   P3_INVALID_FRAME       the frame number is invalid
  *   P1_SUCCESS:            success
  *
  *----------------------------------------------------------------------
