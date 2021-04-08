@@ -112,7 +112,7 @@ P4_Startup(void *arg)
 
     Debug("P4_Startup starting.\n");
     rc = Sys_VmInit(PAGES, PAGES, PAGES, 1, (void **) &vmRegion, &pageSize);
-    TEST(rc, P1_SUCCESS);
+    TEST_RC(rc, P1_SUCCESS);
 
     rc = Sys_LockCreate("readylock", &lock);
     TEST_RC(rc, P1_SUCCESS);
