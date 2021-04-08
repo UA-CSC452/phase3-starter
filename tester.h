@@ -42,7 +42,21 @@ static char *errors[] = {
     "Invalid first sector.",
     "Invalid number of sectors.",
     "Address is NULL.",
-    "Process was not spawned."
+    "Process was not spawned.",
+    "Invalid number of pages.",
+    "Invalid number of frames.",
+    "Invalid number of pagers.",
+    "Already initialized.",
+    "Already has a page table.",
+    "Frame not mapped.",
+    "Page not found.",
+    "Out of swap.",
+    "Not initialized.",
+    "Out of pages.",
+    "Invalid frame.",
+    "Invalid page.",
+    "Access violation.",
+    "Not implemented."
 };
 
 static int numCodes = sizeof(errors) / sizeof(char *);
