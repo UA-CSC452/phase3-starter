@@ -13,7 +13,6 @@
 #include <usloss.h>
 #include <stdlib.h>
 #include <phase3.h>
-#include <phase3Int.h>
 #include <stdarg.h>
 #include <unistd.h>
 
@@ -21,17 +20,18 @@
 
 #define PAGES 4        
 
+typedef int PID;
+typedef int SID;
+
 static char *vmRegion;
 static int  pageSize;
-static int lock;
-static int cond;
-static int writerDone = FALSE;
 
 #ifdef DEBUG
 int debugging = 1;
 #else
 int debugging = 0;
 #endif /* DEBUG */
+
 
 static int passed = FALSE;
 
@@ -50,10 +50,11 @@ Debug(char *fmt, ...)
 static int
 Writer(void *arg)
 {
+    SID     sid = (SID) arg;
     int     rc;
     PID     pid;
 
-    Sys_GetPid(&pid);
+    Sys_GetPID(&pid);
     Debug("Writer (%d) starting.\n", pid);
     for (int i = 0; i < PAGES; i++) {
         char *page = vmRegion + i * pageSize;
@@ -63,33 +64,21 @@ Writer(void *arg)
         }
     }
 
-    // tell the reader we are done.
-    rc = Sys_LockAcquire(lock);
-    TEST_RC(rc, P1_SUCCESS);
-    writerDone = TRUE;
-    rc = Sys_CondSignal(cond);
-    TEST_RC(rc, P1_SUCCESS);
-    rc = Sys_LockRelease(lock);
-    TEST_RC(rc, P1_SUCCESS);
+    rc = Sys_SemV(sid);
+    assert(rc == P1_SUCCESS);
     Debug("Writer done.\n", pid);
     return 0;
 }
 static int
 Reader(void *arg)
 {
+    SID     sid = (SID) arg;
     int     rc;
     PID     pid;
 
-    Sys_GetPid(&pid);
-    rc = Sys_LockAcquire(lock);
-    TEST_RC(rc, P1_SUCCESS);
-    while (!writerDone) {
-        rc = Sys_CondWait(cond);
-        TEST_RC(rc, P1_SUCCESS);
-    }
-    rc = Sys_LockRelease(lock);
-    TEST_RC(rc, P1_SUCCESS);
-
+    Sys_GetPID(&pid);
+    rc = Sys_SemP(sid);
+    assert(rc == P1_SUCCESS);
     Debug("Reader (%d) starting.\n", pid);
     for (int i = 0; i < PAGES; i++) {
         char *page = vmRegion + i * pageSize;
@@ -102,40 +91,39 @@ Reader(void *arg)
     return 0;
 }
 
+
 int
 P4_Startup(void *arg)
 {
     int     i;
     int     rc;
     PID     pid;
-    int     status;
+    PID     child;
+    SID     sid;
 
     Debug("P4_Startup starting.\n");
-    rc = Sys_VmInit(PAGES, PAGES, PAGES, 1, (void **) &vmRegion, &pageSize);
+    rc = Sys_VmInit(PAGES, PAGES, PAGES, 0, (void **) &vmRegion);
     TEST(rc, P1_SUCCESS);
 
-    rc = Sys_LockCreate("readylock", &lock);
-    TEST_RC(rc, P1_SUCCESS);
-    rc = Sys_CondCreate("readycond", lock, &cond);
-    TEST_RC(rc, P1_SUCCESS);
+    rc = Sys_SemCreate("ready", 0, &sid);
+    assert(rc == P1_SUCCESS);
 
-    rc = Sys_Spawn("Reader", Reader, NULL, USLOSS_MIN_STACK * 2, 2, &pid);
-    TEST_RC(rc, P1_SUCCESS);
+    pageSize = USLOSS_MmuPageSize();
 
-    rc = Sys_Spawn("Writer", Writer, NULL, USLOSS_MIN_STACK * 2, 2, &pid);
-    TEST_RC(rc, P1_SUCCESS);
+    rc = Sys_Spawn("Reader", Reader, (void *) sid, USLOSS_MIN_STACK * 2, 2, &pid);
+    assert(rc == P1_SUCCESS);
+
+    rc = Sys_Spawn("Writer", Writer, (void *) sid, USLOSS_MIN_STACK * 2, 2, &pid);
+    assert(rc == P1_SUCCESS);
 
 
     for (i = 0; i < 2; i++) {
-        rc = Sys_Wait(&pid, &status);
-        TEST_RC(rc, P1_SUCCESS);
-        assert(status == 0);
+        rc = Sys_Wait(&pid, &child);
+        assert(rc == P1_SUCCESS);
     }
-    USLOSS_Console("faults: %d\n", P3_vmStats.faults);
-    TEST(P3_vmStats.faults, 2 * PAGES);
-    TEST(P3_vmStats.newPages, 2 * PAGES);
+    TEST(P3_vmStats.faults, 0);
     Sys_VmShutdown();
-    passed = TRUE;
+    PASSED();
     Debug("P4_Startup done.\n");
     return 0;
 }
@@ -146,11 +134,7 @@ void test_setup(int argc, char **argv) {
 
 void test_cleanup(int argc, char **argv) {
     if (passed) {
-        PASSED_FINISH();
+        USLOSS_Console("TEST PASSED.\n");
     }
 
 }
-
-void finish(int argc, char **argv) {}
-
-int P3PageFaultResolve(int pid, int page, int *frame) { return P3_NOT_IMPLEMENTED;}

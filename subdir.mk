@@ -22,6 +22,8 @@ ifndef PREFIX
         PREFIX = $(HOME)
 endif
 
+include ../versions.mk
+
 # Compute the phase from the current working directory.
 ifndef PHASE
 	PHASE = $(lastword $(subst /, ,$(CURDIR)))
@@ -54,23 +56,22 @@ LIBS = -lusloss$(USLOSS_VERSION) \
 
 STUBS = ./p3/p3stubs.o
 
+LDFLAGS += -L. -L$(PREFIX)/cs452/lib -L$(PREFIX)/lib 
+
 ifeq ($(PHASE), phase3b)
 	LIBS += -lphase3a-$(PHASE3A_VERSION)
+	STUBS =
 else ifeq ($(PHASE), phase3c)
 	LIBS += -lphase3a-$(PHASE3A_VERSION)
 	LIBS += -lphase3b-$(PHASE3B_VERSION)
-	STUBS =
-else ifeq ($(PHASE), phase3d)
-	LIBS += -lphase3a-$(PHASE3A_VERSION)
-	LIBS += -lphase3b-$(PHASE3B_VERSION)
-	LIBS += -lphase3c-$(PHASE3C_VERSION)
 	STUBS =
 endif
 
 LIBS += -l$(PHASE)-$(VERSION) 
 
 # Change this if you want change which flags are passed to the C compiler.
-CFLAGS += -Wall -g -std=gnu99 -Werror -DPHASE=$(PHASE_UPPER) -DVERSION=$(VERSION) -DDATE="`date`"
+CFLAGS += -Wall -g -std=gnu99 -Werror -DPHASE=$(PHASE_UPPER) -D$(PHASE_UPPER) -DVERSION=$(VERSION) -DDATE="`date`"
+
 #CFLAGS += -DDEBUG
 
 # You shouldn't need to change anything below here. 
@@ -81,10 +82,10 @@ INCLUDES = -I. -I.. -I$(PREFIX)/include
 
 ifeq ($(shell uname),Darwin)
 	DEFINES += -D_XOPEN_SOURCE
-	OS = macOS
+	OS = macosx
 	CFLAGS += -Wno-int-to-void-pointer-cast -Wno-extra-tokens -Wno-unused-label -Wno-unused-function
 else
-	OS = Linux
+	OS = linux
 	CFLAGS += -Wno-pointer-to-int-cast -Wno-int-to-pointer-cast -Wno-unused-but-set-variable -Wno-unused-function
 	LDFLAGS += -static
 endif
@@ -94,11 +95,11 @@ CFLAGS += -DOS=$(OS)
 CC=gcc
 LD=gcc
 AR=ar    
+RANLIB=ranlib 
 CFLAGS += $(INCLUDES) $(DEFINES)
-LDFLAGS += -L. -L$(PREFIX)/cs452/lib -L$(PREFIX)/lib 
 COBJS = ${SRCS:.c=.o}
 DEPS = ${COBJS:.o=.d}
-TSRCS = {$TESTS:=.c}
+TSRCS = ${TESTS:=.c}
 TOBJS = ${TESTS:=.o}
 TDEPS = ${TOBJS:.o=.d}
 TOUTS = ${TESTS:=.out}
@@ -107,11 +108,13 @@ TVS = ${TESTS:=.v}
 # The following is to deal with circular dependencies between the USLOSS and phase1
 # libraries. Unfortunately the linkers handle this differently on the two OSes.
 
-ifeq ($(OS), macOS)
+ifeq ($(OS), macosx)
 	LIBFLAGS = -Wl,-all_load $(LIBS)
 else
 	LIBFLAGS = -Wl,--start-group $(LIBS) -Wl,--end-group
 endif
+
+.PHONY: $(PHASE) tests
 
 %.d: %.c
 	$(CC) -c $(CFLAGS) -MM -MF $@ $<
@@ -131,19 +134,14 @@ install: $(TARGET)
 .NOTPARALLEL: tests
 tests: $(TOUTS)
 
-# Remove implicit rules so that "make phaseX" doesn't try to build it from phaseX.c or phaseX.o
-% : %.c
-
-% : %.o
-
 %.out: %
-	./$< 1> $@ 2>&1
+	./$< $(TESTFLAGS) 1> $@ 2>&1
 
 $(TESTS):   %: $(TARGET) %.o $(STUBS)
 	$(LD) $(LDFLAGS) -o $@ $@.o $(STUBS) $(LIBFLAGS)
 
 clean:
-	rm -f $(COBJS) $(TARGET) $(TOBJS) $(TESTS) $(DEPS) $(TDEPS) $(TVS) $(STUBS) *.out tests/*.out tests/*.err
+	rm -f $(COBJS) $(TARGET) $(TOBJS) $(TESTS) $(DEPS) $(TDEPS) $(TVS) *.out tests/*.out tests/*.err
 
 %.d: %.c
 	$(CC) -c $(CFLAGS) -MM -MF $@ $<

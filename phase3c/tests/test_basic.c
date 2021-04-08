@@ -1,8 +1,8 @@
 /*
  * basic.c
  *  
- *  Basic test case for Phase 3 Part C. It creates two processes, "A" and "B". 
- *  Each process has two pages and there are four frames so that all pages fit in memory.
+ *  Basic test case for Phase 3 Part D. It creates two processes, "A" and "B". 
+ *  Each process has four pages and there are three frames so that not all pages fit in memory.
  *  Each process writes its name into the first byte of each of its pages, sleeps for one
  *  second (to give the other process time to run), then verifies that the first byte
  *  of each page is correct. It then iterates a fixed number of times.
@@ -24,24 +24,27 @@
 #include <phase3.h>
 #include <stdarg.h>
 #include <unistd.h>
+#include <libdisk.h>
 
 #include "tester.h"
 #include "phase3Int.h"
 
-#define PAGES 2         // # of pages per process (be sure to try different values)
+#define PAGES 4         // # of pages per process (be sure to try different values)
+#define FRAMES ((PAGES) - 1)
 #define ITERATIONS 10
 #define PAGERS 2        // # of pagers
 
 static char *vmRegion;
 static char *names[] = {"A","B"};   // names of children, add more names to create more children
+static int  numChildren = sizeof(names) / sizeof(char *);
 static int  pageSize;
 
 static int passed = FALSE;
 
 #ifdef DEBUG
-int debugging = 1;
+static int debugging = 1;
 #else
-int debugging = 0;
+static int debugging = 0;
 #endif /* DEBUG */
 
 static void
@@ -71,7 +74,7 @@ Child(void *arg)
     // The first time a page is read it should be full of zeros.
     for (j = 0; j < PAGES; j++) {
         page = vmRegion + j * pageSize;
-        Debug("Child \"%s\" reading zeros from page %d @ %p\n", name, j, page);
+        Debug("Child \"%s\" (%d) reading zeros from page %d @ %p\n", name, pid, j, page);
         for (int k = 0; k < pageSize; k++) {
             TEST(page[k], '\0');
         }
@@ -81,7 +84,7 @@ Child(void *arg)
             rc = Sys_Sleep(1);
             assert(rc == P1_SUCCESS);
             page = vmRegion + j * pageSize;
-            Debug("Child \"%s\" writing to page %d @ %p\n", name, j, page);
+            Debug("Child \"%s\" (%d) writing to page %d @ %p\n", name, pid, j, page);
             for (int k = 0; k < pageSize; k++) {
                 page[k] = *name;
             }
@@ -90,13 +93,13 @@ Child(void *arg)
             rc = Sys_Sleep(1);
             assert(rc == P1_SUCCESS);
             page = vmRegion + j * pageSize;
-            Debug("Child \"%s\" reading from page %d @ %p\n", name, j, page);
+            Debug("Child \"%s\" (%d) reading from page %d @ %p\n", name, pid, j, page);
             for (int k = 0; k < pageSize; k++) {
                 TEST(page[k], *name);
             }
         }
     }
-    Debug("Child \"%s\" done.\n", name);
+    Debug("Child \"%s\" (%d) done.\n", name, pid);
     return 0;
 }
 
@@ -108,10 +111,9 @@ P4_Startup(void *arg)
     int     rc;
     int     pid;
     int     status;
-    int     numChildren = sizeof(names) / sizeof(char *);
 
     Debug("P4_Startup starting.\n");
-    rc = Sys_VmInit(PAGES, PAGES, numChildren * PAGES, PAGERS, (void **) &vmRegion);
+    rc = Sys_VmInit(PAGES, PAGES, FRAMES, PAGERS, (void **) &vmRegion);
     TEST(rc, P1_SUCCESS);
 
 
@@ -133,20 +135,14 @@ P4_Startup(void *arg)
 
 
 void test_setup(int argc, char **argv) {
+    DeleteAllDisks();
+    int rc = Disk_Create(NULL, P3_SWAP_DISK, numChildren * PAGES);
+    assert(rc == 0);    
 }
 
 void test_cleanup(int argc, char **argv) {
+    DeleteAllDisks();
     if (passed) {
         USLOSS_Console("TEST PASSED.\n");
     }
 }
-
-// Phase 3d stubs
-
-#include "phase3Int.h"
-
-int P3SwapInit(int pages, int frames) {return P1_SUCCESS;}
-int P3SwapShutdown(void) {return P1_SUCCESS;}
-int P3SwapFreeAll(PID pid) {return P1_SUCCESS;}
-int P3SwapOut(int *frame) {return P1_SUCCESS;}
-int P3SwapIn(PID pid, int page, int frame) {return P3_EMPTY_PAGE;}

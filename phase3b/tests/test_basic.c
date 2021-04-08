@@ -1,10 +1,19 @@
 /*
  * basic.c
  *  
- *  Basic test case for Phase 3a. It creates two processes, Writer and Reader. 
- *  Each process has four pages and there are four frames. Phase 3a implements identity page
- *  tables so that page x -> frame x for all processes. Writer writes x+1 to every byte of 
- *  page x, then Reader reads the pages and verifies their contents.
+ *  Basic test case for Phase 3 Part C. It creates two processes, "A" and "B". 
+ *  Each process has two pages and there are four frames so that all pages fit in memory.
+ *  Each process writes its name into the first byte of each of its pages, sleeps for one
+ *  second (to give the other process time to run), then verifies that the first byte
+ *  of each page is correct. It then iterates a fixed number of times.
+ *
+ *  You can change the number of pages and iterations by changing the macros below. You
+ *  can add more processes by adding more names to the "names" array, e.g. "C". The
+ *  code will adjust the number of frames accordingly.
+ *
+ *  It makes liberal use of the "assert" function because it will dump core when it fails
+ *  allowing you to easily look at the state of the program and figure out what went wrong,
+ *  and because I'm lazy.
  *
  */
 #include <usyscall.h>
@@ -17,23 +26,23 @@
 #include <unistd.h>
 
 #include "tester.h"
+#include "phase3Int.h"
 
-#define PAGES 4        
-
-typedef int PID;
-typedef int SID;
+#define PAGES 2         // # of pages per process (be sure to try different values)
+#define ITERATIONS 10
+#define PAGERS 2        // # of pagers
 
 static char *vmRegion;
+static char *names[] = {"A","B"};   // names of children, add more names to create more children
 static int  pageSize;
+
+static int passed = FALSE;
 
 #ifdef DEBUG
 int debugging = 1;
 #else
 int debugging = 0;
 #endif /* DEBUG */
-
-
-static int passed = FALSE;
 
 static void
 Debug(char *fmt, ...)
@@ -48,46 +57,46 @@ Debug(char *fmt, ...)
 
 
 static int
-Writer(void *arg)
+Child(void *arg)
 {
-    SID     sid = (SID) arg;
+    volatile char *name = (char *) arg;
+    int     i,j;
+    char    *page;
     int     rc;
-    PID     pid;
+    int     pid;
 
     Sys_GetPID(&pid);
-    Debug("Writer (%d) starting.\n", pid);
-    for (int i = 0; i < PAGES; i++) {
-        char *page = vmRegion + i * pageSize;
-        Debug("Writing page %d.\n", i);
-        for (int j = 0; j < pageSize; j++) {
-            page[j] = i+1;
+    Debug("Child \"%s\" (%d) starting.\n", name, pid);
+
+    // The first time a page is read it should be full of zeros.
+    for (j = 0; j < PAGES; j++) {
+        page = vmRegion + j * pageSize;
+        Debug("Child \"%s\" reading zeros from page %d @ %p\n", name, j, page);
+        for (int k = 0; k < pageSize; k++) {
+            TEST(page[k], '\0');
+        }
+    }    
+    for (i = 0; i < ITERATIONS; i++) {
+        for (j = 0; j < PAGES; j++) {
+            rc = Sys_Sleep(1);
+            assert(rc == P1_SUCCESS);
+            page = vmRegion + j * pageSize;
+            Debug("Child \"%s\" writing to page %d @ %p\n", name, j, page);
+            for (int k = 0; k < pageSize; k++) {
+                page[k] = *name;
+            }
+        }
+        for (j = 0; j < PAGES; j++) {
+            rc = Sys_Sleep(1);
+            assert(rc == P1_SUCCESS);
+            page = vmRegion + j * pageSize;
+            Debug("Child \"%s\" reading from page %d @ %p\n", name, j, page);
+            for (int k = 0; k < pageSize; k++) {
+                TEST(page[k], *name);
+            }
         }
     }
-
-    rc = Sys_SemV(sid);
-    assert(rc == P1_SUCCESS);
-    Debug("Writer done.\n", pid);
-    return 0;
-}
-static int
-Reader(void *arg)
-{
-    SID     sid = (SID) arg;
-    int     rc;
-    PID     pid;
-
-    Sys_GetPID(&pid);
-    rc = Sys_SemP(sid);
-    assert(rc == P1_SUCCESS);
-    Debug("Reader (%d) starting.\n", pid);
-    for (int i = 0; i < PAGES; i++) {
-        char *page = vmRegion + i * pageSize;
-        Debug("Reading page %d.\n", i);
-        for (int j = 0; j < pageSize; j++) {
-            TEST(page[j], i+1);
-        }
-    }
-    Debug("Reader done.\n", pid);
+    Debug("Child \"%s\" done.\n", name);
     return 0;
 }
 
@@ -97,34 +106,28 @@ P4_Startup(void *arg)
 {
     int     i;
     int     rc;
-    PID     pid;
-    PID     child;
-    SID     sid;
+    int     pid;
+    int     status;
+    int     numChildren = sizeof(names) / sizeof(char *);
 
     Debug("P4_Startup starting.\n");
-    rc = Sys_VmInit(PAGES, PAGES, PAGES, 0, (void **) &vmRegion);
+    rc = Sys_VmInit(PAGES, PAGES, numChildren * PAGES, PAGERS, (void **) &vmRegion);
     TEST(rc, P1_SUCCESS);
 
-    rc = Sys_SemCreate("ready", 0, &sid);
-    assert(rc == P1_SUCCESS);
 
     pageSize = USLOSS_MmuPageSize();
-
-    rc = Sys_Spawn("Reader", Reader, (void *) sid, USLOSS_MIN_STACK * 2, 2, &pid);
-    assert(rc == P1_SUCCESS);
-
-    rc = Sys_Spawn("Writer", Writer, (void *) sid, USLOSS_MIN_STACK * 2, 2, &pid);
-    assert(rc == P1_SUCCESS);
-
-
-    for (i = 0; i < 2; i++) {
-        rc = Sys_Wait(&pid, &child);
+    for (i = 0; i < numChildren; i++) {
+        rc = Sys_Spawn(names[i], Child, (void *) names[i], USLOSS_MIN_STACK * 4, 3, &pid);
         assert(rc == P1_SUCCESS);
     }
-    TEST(P3_vmStats.faults, 0);
+    for (i = 0; i < numChildren; i++) {
+        rc = Sys_Wait(&pid, &status);
+        assert(rc == P1_SUCCESS);
+        TEST(status, 0);
+    }
+    Debug("Children terminated\n");
     Sys_VmShutdown();
     PASSED();
-    Debug("P4_Startup done.\n");
     return 0;
 }
 
@@ -136,5 +139,14 @@ void test_cleanup(int argc, char **argv) {
     if (passed) {
         USLOSS_Console("TEST PASSED.\n");
     }
-
 }
+
+// Phase 3d stubs
+
+#include "phase3Int.h"
+
+int P3SwapInit(int pages, int frames) {return P1_SUCCESS;}
+int P3SwapShutdown(void) {return P1_SUCCESS;}
+int P3SwapFreeAll(PID pid) {return P1_SUCCESS;}
+int P3SwapOut(int *frame) {return P1_SUCCESS;}
+int P3SwapIn(PID pid, int page, int frame) {return P3_EMPTY_PAGE;}

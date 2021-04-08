@@ -1,11 +1,7 @@
 /*
- * basic.c
- *  
- *  Basic test case for Phase 3a. It creates two processes, Writer and Reader. 
- *  Each process has four pages and there are four frames. Phase 3a implements identity page
- *  tables so that page x -> frame x for all processes. Writer writes x+1 to every byte of 
- *  page x, then Reader reads the pages and verifies their contents.
+ * test_out_of_swap.c
  *
+ * Tests what happens when P3PageFaultResolve returns P3_OUT_OF_SWAP.
  */
 #include <usyscall.h>
 #include <libuser.h>
@@ -129,7 +125,10 @@ P4_Startup(void *arg)
     for (i = 0; i < 2; i++) {
         rc = Sys_Wait(&pid, &status);
         TEST_RC(rc, P1_SUCCESS);
-        assert(status == 0);
+        // writer should exit w/ P3_OUT_OF_SWAP
+        TEST(status, P3_OUT_OF_SWAP);
+        passed = TRUE;
+        USLOSS_Halt(0);
     }
     USLOSS_Console("faults: %d\n", P3_vmStats.faults);
     TEST(P3_vmStats.faults, 2 * PAGES);
@@ -153,4 +152,4 @@ void test_cleanup(int argc, char **argv) {
 
 void finish(int argc, char **argv) {}
 
-int P3PageFaultResolve(int pid, int page, int *frame) { return P3_NOT_IMPLEMENTED;}
+int P3PageFaultResolve(int pid, int page, int *frame) { return P3_OUT_OF_SWAP;}
