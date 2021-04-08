@@ -26,21 +26,16 @@ typedef int PID;    // PID
 // Phase 3a
 
 int         P3PageTableGet(PID pid, USLOSS_PTE **table) CHECKRETURN;
-int         P3PageTableSet(PID pid, USLOSS_PTE *table) CHECKRETURN;
 
 // Phase 3b
 
 int         P3FrameInit(int pages, int frames) CHECKRETURN;
-int         P3FrameShutdown(void) CHECKRETURN;
 int         P3FrameFreeAll(PID pid) CHECKRETURN;
-int         P3FrameMap(int frame, void **addr) CHECKRETURN;
-int         P3FrameUnmap(int frame) CHECKRETURN;
 int         P3PageFaultResolve(int pid, int page, int *frame) CHECKRETURN;
 
 // Phase 3c
 
 int         P3SwapInit(int pages, int frames) CHECKRETURN;
-int         P3SwapShutdown(void) CHECKRETURN;
 int         P3SwapFreeAll(PID pid) CHECKRETURN;
 int         P3SwapOut(int *frame) CHECKRETURN;
 int         P3SwapIn(PID pid, int page, int frame) CHECKRETURN;
