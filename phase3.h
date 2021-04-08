@@ -11,12 +11,12 @@
 /*
  * Maximum number of pager processes.
  */
-#define P3_MAX_PAGERS   3
+#define P3_MAX_PAGERS   1
 
 /*
  * Pager priority.
  */
-#define P3_PAGER_PRIORITY   2
+#define P3_PAGER_PRIORITY   1
 
 /*
  * Swap disk.
@@ -33,7 +33,7 @@ typedef struct P3_VmStats {
     int freeFrames; /* # of frames that are not in-use */
     int freeBlocks; /* # of blocks that are not in-use */
     int faults;     /* # of page faults */
-    int new;        /* # faults caused by previously unused pages*/
+    int newPages;   /* # faults caused by previously unused pages*/
     int pageIns;    /* # faults that required reading page from disk */
     int pageOuts;   /* # faults that required writing a page to disk */
     int replaced;   /* # pages replaced */
@@ -45,18 +45,20 @@ extern P3_VmStats P3_vmStats;
  * Error codes
  */
 
-#define P3_INVALID_NUM_PAGES        -30
-#define P3_INVALID_NUM_FRAMES       -31
-#define P3_INVALID_NUM_PAGERS       -32
-#define P3_ALREADY_INITIALIZED      -33
-#define P3_HAS_TABLE                -34
-#define P3_FRAME_NOT_MAPPED         -35
-#define P3_EMPTY_PAGE               -36
-#define P3_OUT_OF_SWAP              -37
-#define P3_NOT_INITIALIZED          -38
-#define P3_OUT_OF_PAGES             -39
-#define P3_INVALID_FRAME            -40
-#define P3_INVALID_PAGE             -41
+#define P3_INVALID_NUM_PAGES        -31
+#define P3_INVALID_NUM_FRAMES       -32
+#define P3_INVALID_NUM_PAGERS       -33
+#define P3_ALREADY_INITIALIZED      -34
+#define P3_HAS_TABLE                -35
+#define P3_FRAME_NOT_MAPPED         -36
+#define P3_PAGE_NOT_FOUND           -37
+#define P3_OUT_OF_SWAP              -38
+#define P3_NOT_INITIALIZED          -39
+#define P3_OUT_OF_PAGES             -40
+#define P3_INVALID_FRAME            -41
+#define P3_INVALID_PAGE             -42
+#define P3_ACCESS_VIOLATION         -43
+#define P3_NOT_IMPLEMENTED          -44
 
 #ifndef CHECKRETURN
 #define CHECKRETURN __attribute__((warn_unused_result))
