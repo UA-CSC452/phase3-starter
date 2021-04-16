@@ -78,4 +78,38 @@ P3FrameFreeAll(int pid)
     return result;
 }
 
+/*
+ *----------------------------------------------------------------------
+ *
+ * P3PageFaultResolve --
+ *
+ *  Frees all frames used by a process
+ *
+ * Results:
+ *   P3_NOT_INITIALIZED:    P3FrameInit has not been 
+ *   P3_NOT_IMPLEMENTED:    this function has not been implemented
+ *   P1_INVALID_PID:        pid is invalid
+ *   P1_INVALID_PAGE:       page is invalid
+ *   P3_OUT_OF_SWAP:        there is no more swap space
+ *   P1_SUCCESS:            success
+ *
+ *----------------------------------------------------------------------
+ */
+int 
+P3PageFaultResolve(int pid, int page, int *frame) 
+{
+    /*******************
+    if there is a free frame
+        frame = a free frame
+    else
+        rc = P3SwapOut(&frame)
+        if rc == P3_OUT_OF_SWAP
+            return rc
+    rc = P3SwapIn(pid, page, frame)
+    if rc == P3_PAGE_NOT_FOUND
+        fill frame with zeros
+    return P1_SUCCESS
+    *******************/
+    return P3_NOT_IMPLEMENTED;
+}
 
