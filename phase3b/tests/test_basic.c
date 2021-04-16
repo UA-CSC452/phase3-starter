@@ -1,7 +1,7 @@
 /*
  * basic.c
  *  
- *  Basic test case for Phase 3 Part C. It creates two processes, "A" and "B". 
+ *  Basic test case for Phase 3 Part B. It creates two processes, "A" and "B". 
  *  Each process has two pages and there are four frames so that all pages fit in memory.
  *  Each process writes its name into the first byte of each of its pages, sleeps for one
  *  second (to give the other process time to run), then verifies that the first byte
@@ -30,7 +30,7 @@
 
 #define PAGES 2         // # of pages per process (be sure to try different values)
 #define ITERATIONS 10
-#define PAGERS 2        // # of pagers
+#define PAGERS 1        // # of pagers
 
 static char *vmRegion;
 static char *names[] = {"A","B"};   // names of children, add more names to create more children
@@ -65,7 +65,7 @@ Child(void *arg)
     int     rc;
     int     pid;
 
-    Sys_GetPID(&pid);
+    Sys_GetPid(&pid);
     Debug("Child \"%s\" (%d) starting.\n", name, pid);
 
     // The first time a page is read it should be full of zeros.
@@ -111,11 +111,10 @@ P4_Startup(void *arg)
     int     numChildren = sizeof(names) / sizeof(char *);
 
     Debug("P4_Startup starting.\n");
-    rc = Sys_VmInit(PAGES, PAGES, numChildren * PAGES, PAGERS, (void **) &vmRegion);
+    rc = Sys_VmInit(PAGES, PAGES, numChildren * PAGES, PAGERS, (void **) &vmRegion, &pageSize);
     TEST(rc, P1_SUCCESS);
 
 
-    pageSize = USLOSS_MmuPageSize();
     for (i = 0; i < numChildren; i++) {
         rc = Sys_Spawn(names[i], Child, (void *) names[i], USLOSS_MIN_STACK * 4, 3, &pid);
         assert(rc == P1_SUCCESS);
@@ -127,7 +126,7 @@ P4_Startup(void *arg)
     }
     Debug("Children terminated\n");
     Sys_VmShutdown();
-    PASSED();
+    passed = TRUE;
     return 0;
 }
 
@@ -141,12 +140,13 @@ void test_cleanup(int argc, char **argv) {
     }
 }
 
-// Phase 3d stubs
+void finish(int argc, char **argv) {}
+
+// Phase 3c stubs
 
 #include "phase3Int.h"
 
 int P3SwapInit(int pages, int frames) {return P1_SUCCESS;}
-int P3SwapShutdown(void) {return P1_SUCCESS;}
 int P3SwapFreeAll(PID pid) {return P1_SUCCESS;}
-int P3SwapOut(int *frame) {return P1_SUCCESS;}
-int P3SwapIn(PID pid, int page, int frame) {return P3_EMPTY_PAGE;}
+int P3SwapOut(int *frame) {return P3_OUT_OF_SWAP;}
+int P3SwapIn(PID pid, int page, int frame) {return P3_PAGE_NOT_FOUND;}

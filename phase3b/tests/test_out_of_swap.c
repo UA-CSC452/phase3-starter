@@ -1,7 +1,7 @@
 /*
  * test_out_of_swap.c
  *  
- *  Tests that the Child is killed when the swap runs out.
+ *  Tests that the Child terminates when the swap runs out.
  *
  */
 #include <usyscall.h>
@@ -16,9 +16,9 @@
 #include "tester.h"
 #include "phase3Int.h"
 
-#define PAGES 1             // # of pages
 #define FRAMES 1            // # of frames
-#define PAGERS 2            // # of pagers
+#define PAGES  FRAMES       // # of pages
+#define PAGERS 1            // # of pagers
 
 static char *vmRegion;
 static int  pageSize;
@@ -45,17 +45,18 @@ static int
 Child(void *arg)
 {
     int     pid;
-    char    dummy;
+    int     pages = (int) arg;
 
-    Sys_GetPID(&pid);
+    Sys_GetPid(&pid);
     Debug("Child (%d) starting.\n", pid);
 
-    // Read the first page. This should cause an out-of-swap error and we should die.
-    dummy = *vmRegion;
-    // Should not get here.
-    passed = FALSE;
-    Debug("Child still alive!!\n");
-    return 1;
+    // write the first byte of each page.
+    for (int page = 0; page < pages; page++) {
+        *(vmRegion + page * pageSize) = 'A' + page;
+    }
+    int rc = Sys_Sleep(1);
+    TEST_RC(rc, P1_SUCCESS);
+    return 9;
 }
 
 static PID childPID;
@@ -68,17 +69,21 @@ P4_Startup(void *arg)
     int     status;
 
     Debug("P4_Startup starting.\n");
-    rc = Sys_VmInit(PAGES, PAGES, FRAMES, PAGERS, (void **) &vmRegion);
+    rc = Sys_VmInit(PAGES, PAGES, FRAMES, PAGERS, (void **) &vmRegion, &pageSize);
     TEST(rc, P1_SUCCESS);
 
-    pageSize = USLOSS_MmuPageSize();
-    rc = Sys_Spawn("Child", Child, NULL, USLOSS_MIN_STACK * 4, 3, &childPID);
-    assert(rc == P1_SUCCESS);
+    // Create a child that writes all the pages and uses up all the frames.
+    rc = Sys_Spawn("Child0", Child, (void *) PAGES, USLOSS_MIN_STACK * 4, 3, &childPID);
+    TEST_RC(rc, P1_SUCCESS);
+
+    // There should be no more frames left, this child should terminate with P3_OUT_OF_SWAP.
+    rc = Sys_Spawn("Child1", Child, (void *) 1, USLOSS_MIN_STACK * 4, 3, &childPID);
+    TEST_RC(rc, P1_SUCCESS);
     rc = Sys_Wait(&pid, &status);
-    assert(rc == P1_SUCCESS);
+    TEST_RC(rc, P1_SUCCESS);
+    TEST(pid, childPID);
     TEST(status, P3_OUT_OF_SWAP);
-    Debug("Child terminated\n");
-    Sys_VmShutdown();
+
     PASSED();
     return 0;
 }
@@ -93,15 +98,15 @@ void test_cleanup(int argc, char **argv) {
     }
 }
 
-// Phase 3d stubs
+void finish(int argc, char **argv) {}
+
+// Phase 3c stubs
 
 #include "phase3Int.h"
 
 int P3SwapInit(int pages, int frames) {return P1_SUCCESS;}
-int P3SwapShutdown(void) {return P1_SUCCESS;}
 int P3SwapFreeAll(PID pid) {return P1_SUCCESS;}
-int P3SwapOut(int *frame) {return P1_SUCCESS;}
-int P3SwapIn(PID pid, int page, int frame) {return P3_OUT_OF_SWAP;}
-
+int P3SwapOut(int *frame) {return P3_OUT_OF_SWAP;}
+int P3SwapIn(PID pid, int page, int frame) {return P3_PAGE_NOT_FOUND;}
 
 
