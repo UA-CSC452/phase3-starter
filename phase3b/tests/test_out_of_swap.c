@@ -16,12 +16,15 @@
 #include "tester.h"
 #include "phase3Int.h"
 
-#define FRAMES 1            // # of frames
+#define FRAMES 10           // # of frames
 #define PAGES  FRAMES       // # of pages
 #define PAGERS 1            // # of pagers
 
 static char *vmRegion;
 static int  pageSize;
+static int  lock;
+static int  cond;
+static int  ready = FALSE;
 
 static int passed = FALSE;
 
@@ -30,6 +33,26 @@ int debugging = 1;
 #else
 int debugging = 0;
 #endif /* DEBUG */
+
+#define ACQUIRE(lock) { \
+    int _rc = Sys_LockAcquire(lock); \
+    assert(_rc == P1_SUCCESS); \
+}
+
+#define RELEASE(lock) { \
+    int _rc = Sys_LockRelease(lock); \
+    assert(_rc == P1_SUCCESS); \
+}
+
+#define WAIT(cond) { \
+    int _rc = Sys_CondWait(cond); \
+    assert(_rc == P1_SUCCESS); \
+}
+
+#define SIGNAL(cond) { \
+    int _rc = Sys_CondSignal(cond); \
+    assert(_rc == P1_SUCCESS); \
+}
 
 static void
 Debug(char *fmt, ...)
@@ -54,6 +77,13 @@ Child(void *arg)
     for (int page = 0; page < pages; page++) {
         *(vmRegion + page * pageSize) = 'A' + page;
     }
+
+    // let P4_Startup know we wrote all the pages
+    ACQUIRE(lock);
+    ready = TRUE;
+    SIGNAL(cond);
+    RELEASE(lock);
+
     int rc = Sys_Sleep(1);
     TEST_RC(rc, P1_SUCCESS);
     return 9;
@@ -72,13 +102,27 @@ P4_Startup(void *arg)
     rc = Sys_VmInit(PAGES, PAGES, FRAMES, PAGERS, (void **) &vmRegion, &pageSize);
     TEST(rc, P1_SUCCESS);
 
+    rc = Sys_LockCreate("childReadyLock", &lock);
+    TEST(rc, P1_SUCCESS);
+
+    rc = Sys_CondCreate("childReady", lock, &cond);
+    TEST(rc, P1_SUCCESS);
+
     // Create a child that writes all the pages and uses up all the frames.
     rc = Sys_Spawn("Child0", Child, (void *) PAGES, USLOSS_MIN_STACK * 4, 3, &childPID);
     TEST_RC(rc, P1_SUCCESS);
 
+    // wait for the child to write all of its pages
+    ACQUIRE(lock);
+    while(!ready) {
+        WAIT(cond);
+    }
+    RELEASE(lock);
+
     // There should be no more frames left, this child should terminate with P3_OUT_OF_SWAP.
     rc = Sys_Spawn("Child1", Child, (void *) 1, USLOSS_MIN_STACK * 4, 3, &childPID);
     TEST_RC(rc, P1_SUCCESS);
+
     rc = Sys_Wait(&pid, &status);
     TEST_RC(rc, P1_SUCCESS);
     TEST(pid, childPID);
