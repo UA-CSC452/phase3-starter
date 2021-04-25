@@ -1,7 +1,7 @@
 /*
  * basic.c
  *  
- *  Basic test case for Phase 3 Part D. It creates two processes, "A" and "B". 
+ *  Basic test case for Phase 3 Part C. It creates two processes, "A" and "B". 
  *  Each process has four pages and there are three frames so that not all pages fit in memory.
  *  Each process writes its name into the first byte of each of its pages, sleeps for one
  *  second (to give the other process time to run), then verifies that the first byte
@@ -32,7 +32,7 @@
 #define PAGES 4         // # of pages per process (be sure to try different values)
 #define FRAMES ((PAGES) - 1)
 #define ITERATIONS 10
-#define PAGERS 2        // # of pagers
+#define PAGERS 1        // # of pagers
 
 static char *vmRegion;
 static char *names[] = {"A","B"};   // names of children, add more names to create more children
@@ -68,7 +68,7 @@ Child(void *arg)
     int     rc;
     int     pid;
 
-    Sys_GetPID(&pid);
+    Sys_GetPid(&pid);
     Debug("Child \"%s\" (%d) starting.\n", name, pid);
 
     // The first time a page is read it should be full of zeros.
@@ -113,11 +113,9 @@ P4_Startup(void *arg)
     int     status;
 
     Debug("P4_Startup starting.\n");
-    rc = Sys_VmInit(PAGES, PAGES, FRAMES, PAGERS, (void **) &vmRegion);
+    rc = Sys_VmInit(PAGES, PAGES, FRAMES, PAGERS, (void **) &vmRegion, &pageSize);
     TEST(rc, P1_SUCCESS);
 
-
-    pageSize = USLOSS_MmuPageSize();
     for (i = 0; i < numChildren; i++) {
         rc = Sys_Spawn(names[i], Child, (void *) names[i], USLOSS_MIN_STACK * 4, 3, &pid);
         assert(rc == P1_SUCCESS);
@@ -129,7 +127,7 @@ P4_Startup(void *arg)
     }
     Debug("Children terminated\n");
     Sys_VmShutdown();
-    PASSED();
+    passed = TRUE;
     return 0;
 }
 
@@ -143,6 +141,8 @@ void test_setup(int argc, char **argv) {
 void test_cleanup(int argc, char **argv) {
     DeleteAllDisks();
     if (passed) {
-        USLOSS_Console("TEST PASSED.\n");
+        PASSED_FINISH();
     }
 }
+
+void finish(int argc, char **argv) {}

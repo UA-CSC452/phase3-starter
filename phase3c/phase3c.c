@@ -1,32 +1,7 @@
 /*
- * phase3d.c
+ * phase3c.c
  *
  */
-
-/***************
-
-NOTES ON SYNCHRONIZATION
-
-There are various shared resources that require proper synchronization. 
-
-Swap space. Free swap space is a shared resource, we don't want multiple pagers choosing the
-same free space to hold a page. You'll need a mutex around the free swap space.
-
-The clock hand is also a shared resource.
-
-The frames are a shared resource in that we don't want multiple pagers to choose the same frame via
-the clock algorithm. That's the purpose of marking a frame as "busy" in the pseudo-code below. 
-Pagers ignore busy frames when running the clock algorithm.
-
-A process's page table is a shared resource with the pager. The process changes its page table
-when it quits, and a pager changes the page table when it selects one of the process's pages
-in the clock algorithm. 
-
-Normally the pagers would perform I/O concurrently, which means they would release the mutex
-while performing disk I/O. I made it simpler by having the pagers hold the mutex while they perform
-disk I/O.
-
-***************/
 
 
 #include <assert.h>
@@ -77,28 +52,6 @@ P3SwapInit(int pages, int frames)
 
     return result;
 }
-/*
- *----------------------------------------------------------------------
- *
- * P3SwapShutdown --
- *
- *  Cleans up the swap data structures.
- *
- * Results:
- *   P3_NOT_INITIALIZED:    P3SwapInit has not been called
- *   P1_SUCCESS:            success
- *
- *----------------------------------------------------------------------
- */
-int
-P3SwapShutdown(void)
-{
-    int result = P1_SUCCESS;
-
-    // clean things up
-
-    return result;
-}
 
 /*
  *----------------------------------------------------------------------
@@ -109,6 +62,7 @@ P3SwapShutdown(void)
  *
  * Results:
  *   P3_NOT_INITIALIZED:    P3SwapInit has not been called
+ *   P1_INVALID_PID:        pid is invalid      
  *   P1_SUCCESS:            success
  *
  *----------------------------------------------------------------------
@@ -119,13 +73,8 @@ P3SwapFreeAll(int pid)
 {
     int result = P1_SUCCESS;
 
-    /*****************
 
-    P(mutex)
-    free all swap space used by the process
-    V(mutex)
-
-    *****************/
+    // free all swap space used by the process
 
 
     return result;
@@ -142,6 +91,7 @@ P3SwapFreeAll(int pid)
  *
  * Results:
  *   P3_NOT_INITIALIZED:    P3SwapInit has not been called
+ *   P1_OUT_OF_SWAP:        there is no more swap space
  *   P1_SUCCESS:            success
  *
  *----------------------------------------------------------------------
@@ -149,33 +99,35 @@ P3SwapFreeAll(int pid)
 int
 P3SwapOut(int *frame) 
 {
-    int result = P1_SUCCESS;
-
     /*****************
 
-    NOTE: in the pseudo-code below I used the notation frames[x] to indicate frame x. You 
-    may or may not have an actual array with this name. As with all my pseudo-code feel free
-    to ignore it.
-
-
-    static int hand = -1;    // start with frame 0
+    static int hand = -1;    // initially start with frame 0
+    if not initialized
+        return P3_NOT_INITIALIZED
     loop
-        hand = (hand + 1) % # of frames
-        if frames[hand] hasn't been referenced (USLOSS_MmuGetAccess)
-            target = hand
+        hand = (hand + 1) % numFrames
+        get access bits for the frame indicated by hand (USLOSS_MmuGetAccess)
+        if reference bit is not set in the access bits
+            frame = hand
             break
         else
-            clear reference bit (USLOSS_MmuSetAccess)
-    if frame[target] is dirty (USLOSS_MmuGetAccess)
-        if page 
-        write page to its location on the swap disk (P2_DiskWrite)
-        clear dirty bit (USLOSS_MmuSetAccess)
-    update page table of process to indicate page is no longer in a frame
-    mark frames[target] as busy
+            clear frame's reference bit (USLOSS_MmuSetAccess)
+    page = page that's in the selected frame
+    pid = pid of the page
+    if page doesn't already have swap space
+        if there is free swap space
+            allocate swap space for the page
+        else
+            return P3_OUT_OF_SWAP
+    if dirty bit is set in the access bits or page isn't in swap space
+        write page to its swap space (P2_DiskWrite)
+        clear frame's dirty bit (USLOSS_MmuSetAccess)
+    get page table for pid (P3PageTableGet)
+    update page's PTE to indicate page is no longer in the frame
 
     *****************/
 
-    return result;
+    return P3_OUT_OF_SWAP;
 }
 /*
  *----------------------------------------------------------------------
@@ -200,13 +152,14 @@ P3SwapIn(int pid, int page, int frame)
 
     /*****************
 
+    if not initialized
+        return P3_NOT_INITIALIZED
+    record that frame holds pid,page for use in P3SwapOut
     if page is on swap disk
         read page from swap disk into frame (P2_DiskRead)
+        return P1_SUCCESS
     else
-        result = P3_PAGE_NOT_FOUND        
-        allocate space for the page on the swap disk
-        if no more space
-            result = P3_OUT_OF_SWAP
+        return P3_PAGE_NOT_FOUND        
 
     *****************/
 
